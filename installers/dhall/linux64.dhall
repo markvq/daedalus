@@ -25,10 +25,9 @@ in
   , walletLogging       = False
   , frontendOnlyMode    = True
 
-  -- todo, find some way to disable updates when unsandboxed?
-  , updaterPath         = "/bin/update-runner"
-  , updaterArgs         = [] : List Text
-  , updateArchive       = [ "${dataDir}/installer.sh" ] : Optional Text
+  , updaterPath         = "/usr/bin/env"
+  , updaterArgs         = [ "update-runner" ] : List Text
+  , updateArchive       = [ "${dataDir}/update.bin" ] : Optional Text
   , updateWindowsRunner = [] : Optional Text
 
   , launcherLogsPrefix  = "${dataDir}/Logs/"

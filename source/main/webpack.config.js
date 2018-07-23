@@ -3,9 +3,6 @@ const yamljs = require('yamljs');
 // const HardSourceWebpackPlugin = require('hard-source-webpack-plugin');
 // const lodash = require('lodash');
 
-let reportUrl = '';
-reportUrl = yamljs.parseFile('launcher-config.yaml').reportServer;
-
 // Process env flags from buildkite and appveyor
 // const isCi = process.env.CI && process.env.CI !== '';
 
@@ -70,14 +67,18 @@ module.exports = {
   plugins: [
     new webpack.DefinePlugin(Object.assign({
       'process.env.API_VERSION': JSON.stringify(process.env.API_VERSION || 'dev'),
-      'process.env.NETWORK': JSON.stringify(process.env.NETWORK || 'development'),
       'process.env.MOBX_DEV_TOOLS': process.env.MOBX_DEV_TOOLS || 0,
       'process.env.BUILD_NUMBER': JSON.stringify(process.env.BUILD_NUMBER || 'dev'),
-      'process.env.REPORT_URL': JSON.stringify(reportUrl),
-      'process.env.IS_WATCH_MODE': process.env.IS_WATCH_MODE === 'true'
+      'process.env.IS_WATCH_MODE': process.env.IS_WATCH_MODE === 'true',
     }, process.env.NODE_ENV === 'production' ? {
       // Only bake in NODE_ENV value for production builds.
       'process.env.NODE_ENV': '"production"',
+    } : {}, process.env.REPORT_URL ? {
+      // Bake in REPORT_URL only if defined at build time.
+      'process.env.REPORT_URL': JSON.stringify(process.env.REPORT_URL),
+    } : {}, process.env.NETWORK ? {
+      // Bake in NETWORK only if defined at build time.
+      'process.env.NETWORK': JSON.stringify(process.env.NETWORK),
     } : {})),
     // Hard source plugin is broken for webpack 4 :(
     // https://github.com/mzgoddard/hard-source-webpack-plugin/issues/443

@@ -13,12 +13,16 @@ in
 }:
 
 let
-  daedalusPkgs = import ./. { inherit cluster system; };
   hostPkgs = import pkgs.path { config = {}; overlays = []; };
   yaml2json = hostPkgs.haskell.lib.disableCabalFlag hostPkgs.haskellPackages.yaml "no-exe";
+  daedalusPkgs = import ./. { inherit system config pkgs; };
   yarn = pkgs.yarn.override { inherit nodejs; };
   nodejs = pkgs.nodejs-8_x;
-  launcher-json = hostPkgs.runCommand "read-launcher-config.json" { buildInputs = [ yaml2json ]; } "yaml2json ${daedalusPkgs.daedalus.cfg}/etc/launcher-config.yaml > $out";
+  daedalus-config = if cluster == "demo"
+    then demoConfig
+    else daedalusPkgs.${cluster}.daedalus-config;
+  launcher-json = pkgs.runCommand "read-launcher-config.json" { buildInputs = [ yaml2json ]; } "yaml2json ${daedalus-config}/launcher-config.yaml > $out";
+  launcher-config = builtins.fromJSON (builtins.readFile launcher-json);
   fullExtraArgs = walletExtraArgs ++ pkgs.lib.optional allowFaultInjection "--allow-fault-injection";
   patches = builtins.concatLists [
     (pkgs.lib.optional (systemStart != null) ".configuration.systemStart = ${toString systemStart}")
@@ -31,7 +35,7 @@ let
     jq '${patchesString}' < ${launcher-json} | json2yaml > $out
     echo "Launcher config:  $out"
   '';
-  launcherConfig' = if (patches == []) then "${daedalusPkgs.daedalus.cfg}/etc/launcher-config.yaml" else launcherYamlWithStartTime;
+  launcherConfig' = if (patches == []) then "${daedalus-config}/launcher-config.yaml" else launcherYamlWithStartTime;
   fixYarnLock = pkgs.stdenv.mkDerivation {
     name = "fix-yarn-lock";
     buildInputs = [ nodejs yarn pkgs.git ];
@@ -64,7 +68,7 @@ let
   '';
   demoConfig = pkgs.runCommand "new-config" {} ''
     mkdir $out
-    cp ${daedalusPkgs.daedalus.cfg}/etc/* $out/
+    cp ${daedalusPkgs.mainnet.daedalus-config}/* $out/
     rm $out/wallet-topology.yaml
     cp ${demoTopologyYaml} $out/wallet-topology.yaml
   '';
@@ -91,7 +95,7 @@ let
     name = "daedalus";
     buildCommand = "touch $out";
     LAUNCHER_CONFIG = launcherConfig';
-    DAEDALUS_CONFIG = if (cluster == "demo") then demoConfig else "${daedalusPkgs.daedalus.cfg}/etc/";
+    DAEDALUS_CONFIG = daedalus-config;
     DAEDALUS_INSTALL_DIRECTORY = "./";
     DAEDALUS_DIR = DAEDALUS_INSTALL_DIRECTORY;
     CLUSTER = cluster;
@@ -116,7 +120,7 @@ let
       ln -svf $(type -P cardano-node)
       ${pkgs.lib.optionalString autoStartBackend ''
         for x in wallet-topology.yaml log-config-prod.yaml configuration.yaml mainnet-genesis-dryrun-with-stakeholders.json ; do
-          ln -svf ${daedalusPkgs.daedalus.cfg}/etc/$x
+          ln -svf ${daedalus-config}/$x
         done
         STATE_PATH=$(eval echo $(jq ".statePath" < ${launcher-json}))
         ${pkgs.lib.optionalString (cluster == "demo") ''
@@ -134,14 +138,11 @@ let
         mkdir -p "''${STATE_PATH}/${secretsDir}"
       ''}
       ${localLib.optionalString autoStartBackend ''
-          TLS_PATH=$(eval echo $(jq ".tlsPath" < ${launcher-json}))
-          mkdir -p "''${TLS_PATH}/server" "''${TLS_PATH}/client"
           cardano-x509-certificates \
-          --server-out-dir "''${TLS_PATH}/server" \
-          --clients-out-dir "''${TLS_PATH}/client" \
-          --configuration-file ${daedalusPkgs.daedalus.cfg}/etc/configuration.yaml \
+          --server-out-dir "${launcher-config.tlsPath}/server" \
+          --clients-out-dir "${launcher-config.tlsPath}/client" \
+          --configuration-file ${daedalus-config}/configuration.yaml \
           --configuration-key mainnet_dryrun_full
-          echo ''${TLS_PATH}
         ''
       }
       export DAEDALUS_INSTALL_DIRECTORY

@@ -1,3 +1,6 @@
+let
+  localLib = import ../lib.nix;
+in
 { system ? builtins.currentSystem
 , config ? {}
 , pkgs ? localLib.iohkNix.getPkgs { inherit system config; }
@@ -27,8 +30,9 @@
 
 # Disables optimization in the build for all local packages.
 , fasterBuild ? false
+
+# Derivation which contains cardano-sl binaries and config
 , daedalus-bridge
-, localLib
 }:
 
 with pkgs;
@@ -50,6 +54,11 @@ let
     customOverlays = [ addTestStubsOverlay ];
   };
 
+  withFilteredSource = drv: drv.overrideAttrs (oldAttrs: {
+    src = localLib.cleanSourceTree oldAttrs.src;
+  });
+
+  drv = withFilteredSource haskellPackages.daedalus-installer;
 
 in
-  justStaticExecutables (haskellPackages.daedalus-installer)
+  justStaticExecutables drv

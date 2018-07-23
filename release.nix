@@ -1,17 +1,28 @@
-{ system ? builtins.currentSystem
+let
+  localLib = import ./lib.nix;
+in
+
+{ supportedSystems ? ["x86_64-linux" "x86_64-darwin"]
+, scrubJobs ? true
+, nixpkgsArgs ? {
+    config = { allowUnfree = false; inHydra = true; };
+    inherit buildNum;
+  }
 , buildNum ? null
 }:
-let
-  daedalusPkgs = { cluster ? null }: import ./. {
-    inherit system buildNum cluster;
-    version = "${version}${suffix}";
-  };
+
+with (import (localLib.iohkNix.nixpkgs + "/pkgs/top-level/release-lib.nix") {
+  inherit supportedSystems scrubJobs nixpkgsArgs;
+  packageSet = import ./.;
+});
+
+{
+  inherit (import ./. {}) tests;
+
   shellEnvs = {
     linux = import ./shell.nix { system = "x86_64-linux"; autoStartBackend = true; };
     darwin = import ./shell.nix { system = "x86_64-darwin"; autoStartBackend = true; };
   };
-  suffix = if buildNum == null then "" else "-${toString buildNum}";
-  version = (builtins.fromJSON (builtins.readFile (./. + "/package.json"))).version;
   yaml2json = let
     daedalusPkgsWithSystem = system: import ./. { inherit system; };
   in {
@@ -19,23 +30,10 @@ let
     x86_64-darwin = (daedalusPkgsWithSystem "x86_64-darwin").yaml2json;
   };
 
-  makeJobs = cluster: with daedalusPkgs { inherit cluster; }; {
-    inherit daedalus;
-    installer = wrappedBundle newBundle pkgs cluster daedalus-bridge.version;
-  };
-  wrappedBundle = newBundle: pkgs: cluster: cardanoVersion: let
-    backend = "cardano-sl-${cardanoVersion}";
-    fn = "daedalus-${version}-${backend}-${cluster}-${system}${suffix}.bin";
-  in pkgs.runCommand fn {} ''
-    mkdir -pv $out/nix-support
-    cp ${newBundle} $out/${fn}
-    echo "file binary-dist $out/${fn}" >> $out/nix-support/hydra-build-products
-    size="$(stat $out/${fn} --printf="%s")"
-    echo installerSize $(($size / 1024 / 1024)) MB >> $out/nix-support/hydra-metrics
-  '';
-  lib = (import ./. {}).pkgs.lib;
-  clusters = lib.splitString " " (builtins.replaceStrings ["\n"] [""] (builtins.readFile ./installer-clusters.cfg));
-in {
-  inherit shellEnvs yaml2json;
-  tests = (daedalusPkgs {}).tests;
-} // builtins.listToAttrs (map (x: { name = x; value = makeJobs x; }) clusters)
+} // mapTestOn {
+  daedalus = supportedSystems;
+
+  mainnet.linuxInstaller = [ "x86_64-linux" ];
+  staging.linuxInstaller = [ "x86_64-linux" ];
+  testnet.linuxInstaller = [ "x86_64-linux" ];
+}
