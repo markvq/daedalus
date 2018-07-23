@@ -2,8 +2,7 @@
 
 module Util where
 
-import Control.Monad (mapM_)
-import Data.Text (Text)
+import Universum
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import System.Directory (listDirectory, withCurrentDirectory, removeDirectory, removeFile, doesDirectoryExist)
