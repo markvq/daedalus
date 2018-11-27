@@ -31,7 +31,7 @@ usage() {
 
     --verbose                 Verbose operation
     --quiet                   Disable verbose operation
-    
+
 EOF
     test -z "$1" || exit 1
 }
@@ -58,10 +58,9 @@ build_id=0
 travis_pr=true
 upload_s3=
 test_install=
-export API=cardano
+export API=etc
 
 daedalus_version="$1"; arg2nz "daedalus version" $1; shift
-cardano_branch="$(printf '%s' "$1" | tr '/' '-')"; arg2nz "Cardano SL branch to build Daedalus with" $1; shift
 
 case "$(uname -s)" in
         Darwin ) os=osx;   key=macos-3.p12;;
@@ -78,7 +77,6 @@ do case "$1" in
                                                            travis_pr="$2"; shift;;
            --nix-path )       arg2nz "NIX_PATH value" $2;
                                                      export NIX_PATH="$2"; shift;;
-           --api )            arg2nz "API" $2; export API="$2"; shift;;
            --upload-s3 )                                   upload_s3=t;;
            --test-install )                             test_install=t;;
 
@@ -103,37 +101,13 @@ export PATH=$HOME/.local/bin:$PATH
 export DAEDALUS_VERSION=${daedalus_version}.${build_id}
 if [ -n "${NIX_SSL_CERT_FILE-}" ]; then export SSL_CERT_FILE=$NIX_SSL_CERT_FILE; fi
 
-case "$API" in
-  etc)
-    test -d mantis/ -a -n "${fast_impure}" || {
-      retry 5 curl -o mantis.app.zip https://s3-eu-west-1.amazonaws.com/iohk.mantis.installer/daedalus-rc1/macos/mantis-1.1-rc4-mac.zip
-      unzip mantis.app.zip
-      ls -ltrh mantis.app/
-      rm mantis.app.zip
-    }
-    INSTALLER_POSTFIX="-mantis"
-    ;;
-  cardano)
-    test -d node_modules/daedalus-client-api/ -a -n "${fast_impure}" || {
-        retry 5 curl -o daedalus-bridge.tar.xz \
-              "https://s3.eu-central-1.amazonaws.com/cardano-sl-travis/daedalus-bridge-${os}-${cardano_branch}.tar.xz"
-        mkdir -p node_modules/daedalus-client-api/
-        du -sh  daedalus-bridge.tar.xz
-        tar xJf daedalus-bridge.tar.xz --strip-components=1 -C node_modules/daedalus-client-api/
-        rm      daedalus-bridge.tar.xz
-        echo "cardano-sl build id is $(cat node_modules/daedalus-client-api/build-id)"
-        if [ -f node_modules/daedalus-client-api/commit-id ]; then echo "cardano-sl revision is $(cat node_modules/daedalus-client-api/commit-id)"; fi
-        if [ -f node_modules/daedalus-client-api/ci-url ]; then echo "cardano-sl ci-url is $(cat node_modules/daedalus-client-api/ci-url)"; fi
-        pushd node_modules/daedalus-client-api
-              mv log-config-prod.yaml cardano-node cardano-launcher configuration.yaml *genesis*.json ../../installers
-        popd
-        chmod +w installers/cardano-{node,launcher}
-        strip installers/cardano-{node,launcher}
-        rm -f node_modules/daedalus-client-api/cardano-*
-    }
-    INSTALLER_POSTFIX=""
-    ;;
-esac
+test -d mantis/ -a -n "${fast_impure}" || {
+  retry 5 curl -o mantis.app.zip https://s3-eu-west-1.amazonaws.com/iohk.mantis.installer/daedalus-rc1/macos/mantis-1.1-rc4-mac.zip
+  unzip -o mantis.app.zip
+  ls -ltrh mantis.app/
+  rm mantis.app.zip
+}
+INSTALLER_POSTFIX="-mantis"
 
 test "$(find node_modules/ | wc -l)" -gt 100 -a -n "${fast_impure}" ||
         nix-shell --run "npm install"
