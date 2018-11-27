@@ -3,6 +3,8 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import Log from 'electron-log';
+
+import { Mantis } from './Mantis';
 import osxMenu from './menus/osx';
 import winLinuxMenu from './menus/win-linux';
 import ipcApi from './ipc-api';
@@ -53,45 +55,30 @@ let mainWindow = null;
 let aboutWindow = null;
 let terminateAboutWindow = false;
 
+const requireEnv = (name) => {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Env variable ${name} is required`);
+  }
+  return value;
+}
+
 const isDev = process.env.NODE_ENV === 'development';
 const isProd = process.env.NODE_ENV === 'production';
 const isTest = process.env.NODE_ENV === 'test';
 
 const isEtcApi = process.env.API === 'etc';
-const mantisCmd = process.env.MANTIS_CMD || null;
-const mantisArgs = process.env.MANTIS_ARGS || '';
-const mantisPath = process.env.MANTIS_PATH || null;
+const mantisCmd = requireEnv('MANTIS_CMD');
+const mantisArgs = requireEnv('MANTIS_ARGS');
+const mantisPath = requireEnv('MANTIS_PATH');
 
 const daedalusVersion = process.env.DAEDALUS_VERSION || 'dev';
 
-if (isEtcApi && mantisCmd && mantisPath) {
-  const { spawn, spawnSync } = require('child_process');
-  const psTree = require('ps-tree');
+const mantis = new Mantis(mantisPath, mantisCmd, mantisArgs);
+mantis.start(null); // temporary, eventually it will be managed by ipc
 
-  // Start Mantis
-  Log.info('Starting Mantis...');
-  const mantis = spawn(mantisCmd, [mantisArgs], { cwd: mantisPath, detached: true, shell: true });
-
-  // Stop Mantis (on app quit)
-  app.on('will-quit', () => {
-    Log.info('Stopping Mantis(PID ' + mantis.pid + ')...');
-    if (process.platform === 'win32') {
-      Log.info('with taskkill');
-      spawnSync('taskkill', ['/F', '/T', '/PID', mantis.pid], { detached: true }); // Kill main Mantis process
-      Log.info('done');
-    } else {
-      Log.info('with process.kill');
-      psTree(mantis.pid, (err, children) => {
-        // Kill all Mantis child processes
-        children.forEach((proc) => {
-          Log.info('and child ' + proc.PID);
-          process.kill(proc.PID);
-        });
-      });
-      process.kill(mantis.pid); // Kill main Mantis process
-    }
-  });
-}
+// Stop Mantis (on app quit)
+app.on('will-quit', mantis.stop);
 
 if (isDev) {
   require('electron-debug')(); // eslint-disable-line global-require
@@ -222,7 +209,7 @@ app.on('ready', async () => {
   mainWindow.setMinimumSize(900, 600);
 
   // Initialize our ipc api methods that can be called by the render processes
-  ipcApi({ mainWindow });
+  ipcApi({ mainWindow, mantis, ipc: ipcMain });
 
   mainWindow.loadURL(`file://${__dirname}/../app/index.html${isTest ? '?test=true' : ''}`);
   mainWindow.on('page-title-updated', event => {
