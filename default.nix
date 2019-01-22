@@ -62,6 +62,9 @@ let
     };
     dhall = "${self.daedalus-installer.src}/dhall";
 
+    # Function to create an AppImage with AppImageKit runtime
+    makeAppImage = self.callPackage ./installers/make-appimage.nix {};
+
     # Pre-built releases of electron adapted from nixpkgs
     electron4 = pkgs.callPackage ./installers/nix/electron.nix {};
     electron3 = pkgs.callPackage ./installers/nix/electron3.nix {};
@@ -77,6 +80,12 @@ let
       # Daedalus app for Linux, with a desktop launcher and icon.
       daedalus-desktop = self.callPackage ./installers/desktop.nix {};
       desktopItem = self.callPackage ./installers/desktop-item.nix {};
+
+      # Self-contained AppImages of Daedalus suitable for other distros.
+      appImage' = self.callPackage ./installers/appimage.nix {
+        daedalus = self.daedalus-desktop;
+      };
+      appImage = localLib.wrapPackage buildNum self.appImage';
 
       # nix-bundle based installer for linux
       linuxInstaller' = import ./installers/linux-installer.nix {

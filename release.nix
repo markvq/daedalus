@@ -33,6 +33,10 @@ with (import (localLib.iohkNix.nixpkgs + "/pkgs/top-level/release-lib.nix") {
 } // mapTestOn {
   daedalus = supportedSystems;
 
+  mainnet.appImage = [ "x86_64-linux" ];
+  staging.appImage = [ "x86_64-linux" ];
+  testnet.appImage = [ "x86_64-linux" ];
+
   mainnet.linuxInstaller = [ "x86_64-linux" ];
   staging.linuxInstaller = [ "x86_64-linux" ];
   testnet.linuxInstaller = [ "x86_64-linux" ];
